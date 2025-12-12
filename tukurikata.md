@@ -6,7 +6,7 @@
 Dockerで立ち上げたWebサーバーのURLを、Uptime-Kumaに入力し、正常と判定させること。
 
 ## 2. システム構成
-* **OS:** Ubuntu 24.04.3 LTS
+* **OS:** Ubuntu 24.04.5 LTS
 * **カーネル:** 6.6.87.2-microsoft-standard-WSL2
 * **実行環境:** ローカル環境 (WSL 2.6.1.0)
 * **ネットワーク条件:** NAT構成
@@ -37,7 +37,7 @@ sudo apt upgrade -y
 # 1. デフォルトの通信をすべて「拒否」に設定
 sudo ufw default deny incoming
 
-# 2. SSH接続（リモート操作）を許可（※設定中に締め出されないために必須）
+# 2. SSH接続（リモート操作）を許可(一応)
 sudo ufw allow ssh
 
 # 3. Webアクセス（HTTP/HTTPS）を許可
@@ -75,7 +75,6 @@ sudo apt autoremove -y
 Webサーバーを立ち上げるためのDocker環境の構築を行う。
 
 ```bash
-# 1. 競合する古いDocker関連パッケージがあれば削除
 # 1. 競合する古いパッケージの削除
 for pkg in docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc; do sudo apt-get remove $pkg; done
 
@@ -95,9 +94,9 @@ echo \
 #aptの更新
 sudo apt-get update
 
-# 4. インストール
+# 4. インストール(途中Y入力必要)
 sudo apt-get install docker-ce docker-ce-cli containerd.io 
-docker-buildx-plugin docker-compose-plugin
+docker-buildx-plugin docker-compose-plugin 
 
 # 5. 現在のユーザを docker グループに追加
 
@@ -114,16 +113,19 @@ newgrp docker
 ```bash
 # フォルダ作成
 mkdir -p ~/docker-webserver/htdocs
+# ディレクトリ移動
 cd ~/docker-webserver
 
 # テスト用HTMLファイルの作成
-echo "<h1>Hello, Docker World!</h1>" > htdocs/index.html
+echo '<h1>Hello, Docker World!</h1>' > htdocs/index.html
 # ホストの8080番ポートを、コンテナの80番（Web）につなぐ
 # ホストの htdocs フォルダを、コンテナの公開フォルダにマウントする
 docker container run -dit -p 8080:80 \
   --name my-apache-app \
   -v ~/docker-webserver/htdocs:/usr/local/apache2/htdocs/ \
   httpd:2.4
+# 一つ上の階層のフォルダへ行く
+cd ..
 ```
 ### 3-5. Uptime-Kuma のインストールと起動
 
@@ -132,9 +134,6 @@ docker container run -dit -p 8080:80 \
 ```bash
 # 前提パッケージの確認（念のため更新とgitインストール）
 sudo apt update
-sudo apt install -y git
-
-#gitのインストール
 sudo apt update && sudo apt install -y git
 # GitHubからUptime-Kumaのソースコードをクローン（ダウンロード）
 git clone https://github.com/louislam/uptime-kuma.git
@@ -163,14 +162,11 @@ pm2 startup
 # Nginxのインストール
 sudo apt install nginx -y
 
-# バージョンの確認
-nginx -v
-
-# Nginxの状態確認
-sudo systemctl status nginx
 ```
 
-設定ファイルを作成・編集します。以下のコマンドを実行するとエディタが開きます。
+設定ファイルを作成・編集します。以下のコマンドを実行するとエディタが開く。  
+
+
 
 ```bash
 # 設定ファイルの作成と編集
@@ -184,7 +180,9 @@ sudo vim /etc/nginx/conf.d/uptime-kuma.conf
 
 ```nginx
 server {
+  #80番ポートを使う
     listen 80;
+  #どんなIPでもこれを使うようにする
     server_name _;
 
     location / {
@@ -211,6 +209,11 @@ server {
     # return 301 https://$host$request_uri;
 }
 ```
+設定ファイルの保存パスは/etc/nginx/conf.d/  
+所有権 root  
+権限はrw-r-r
+となる．  
+
 
 最後に、デフォルト設定を無効化してNginxを再起動します。
 
@@ -224,18 +227,75 @@ sudo systemctl restart nginx
 
 ---
 
-### 動作確認
-windowsのブラウザを開き、`http://localhost` または 図1に示すようなUptime-Kumaの画面が表示されるか確認する。
+ ### 動作確認
+windowsのブラウザを開き、`http://localhost` と入力して 図1に示すようなUptime-Kumaの画面が表示されるか確認する。
+![](images/tukurikata_2025-12-12-21-34-23.png)
+<div style="text-align: center;">
+図1. 最初の画面
+</div> 
 
 確認出来たらSQLiteの方を選択して
 「次へ」をクリックする
 そうしたら図2に示すような画面が出てくるのでアカウントとパスワードを設定して「作成」をクリックする．
-
-
+![](images/tukurikata_2025-12-12-21-38-04.png)
+<div style="text-align: center;">
+図2. アカウント作成画面
+</div> 
 そうしたら図3に示すような画面が出てくるので「+監視の追加」をクリックして，出てくる図4の画面でURLに
-```bash
-http://localhost:8080
-```
-と入力した後に「ダッシュボード」に戻り，「正常1」と出ていれば大丈夫
+
+`http://localhost:8080`
+
+と入力した後に「ダッシュボード」に戻り，「正常1」と出ていれば終了
+
+![](images/tukurikata_2025-12-12-21-39-49.png)
+<div style="text-align: center;">
+図3. メイン画面
+</div> 
+
+![](images/tukurikata_2025-12-12-21-48-08.png)
+<div style="text-align: center;">
+図4. 監視対象の設定画面
+</div> 
 
 
+ ### トラブルシューティング
+  - 図4の画面でURLを入力したら異常と出る  
+    まず，
+
+    `http://localhost:8080`
+
+    をブラウザに入力してみる  
+    画面にHello,DockerWorld!と出たら
+    おそらく図4の段階でURLの入力を間違えていると考えられる  
+    出ない場合
+
+    `docker ps -a`
+
+    と入力して
+    httpd:2.4のSTARUSがExitedとなっていたら
+    CONTAINER IDを確認して
+  
+    `docker start CONTAINER_ID`
+
+    何もなかったら3-4の作業をやったか確認してください
+  - http://localhostに移動しても図1の画面が出ない
+  
+    502 Bad Gatewayとでる 場合 
+    Uptime-Kuma が停止していると考えられるので  
+    3-5を行ったか確認して行ったなら
+    Ubuntu上で
+    ```bash
+    cd uptime-kuma
+
+    pm2 resutart uptime-kuma
+    ```
+    と入力
+    そもそもアクセスできない場合
+    nginxが止まっている可能性があるので
+    3-6を行ったか確認して行ったなら  
+    `sudo systemctl start nginx`
+
+ ### 参考資料
+ - WSL のインストール | Microsoft Learn,https://learn.microsoft.com/ja-jp/windows/wsl/install
+ - Install Uptime Kuma on Linux,https://uptimekuma.org/install-uptime-kuma-linux/
+ - Server names,https://nginx.org/en/docs/http/server_names.html
